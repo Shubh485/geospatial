@@ -1,0 +1,285 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { demoDataProvider } from "../services/demoDataProvider.js";
+import type { ChartKind, LayerKey, Scope, VerifyStatus } from "../types.ts";
+import type { VisionResult } from "../services/vision.ts";
+
+const STORAGE_KEY = "geowise-demo-session-v1";
+
+export type LayerState = Record<LayerKey, boolean> & { allData: boolean; satellite: boolean };
+
+export type ObservationDraft = {
+  id: string;
+  fieldId: string | null;
+  regionId: string;
+  capturedAt: string;
+  lat: number;
+  lng: number;
+  locationSource: string;
+  waterBodyType: string;
+  userNotes: string;
+  vision: VisionResult;
+  imageName: string;
+};
+
+type Toast = { id: string; title: string; body: string };
+
+type Session = {
+  scope: Scope;
+  selectedFieldId: string;
+  selectedDate: string;
+  chartKind: ChartKind;
+  metricIndex: string;
+  weatherKey: string;
+  sidebarCollapsed: boolean;
+  layers: LayerState;
+  verification: Record<string, VerifyStatus>;
+  assignments: Record<string, string>;
+  observations: ObservationDraft[];
+  readNotifs: string[];
+  extraCredits: { regionId: string; amount: number; reason: string; at: string }[];
+  toasts: Toast[];
+};
+
+const defaultLayers: LayerState = {
+  allData: false,
+  satellite: true,
+  watershed: true,
+  parcels: true,
+  lulc: false,
+  ndvi: false,
+  ndwi: false,
+  water: false,
+  ai: true,
+  verification: false,
+  jal: false,
+};
+
+const defaultSession: Session = {
+  scope: "india",
+  selectedFieldId: "FIELD-001",
+  selectedDate: "2025-07-19",
+  chartKind: "line",
+  metricIndex: "NDVI",
+  weatherKey: "Moisture",
+  sidebarCollapsed: false,
+  layers: defaultLayers,
+  verification: {},
+  assignments: {},
+  observations: [],
+  readNotifs: [],
+  extraCredits: [],
+  toasts: [],
+};
+
+function loadSession(): Session {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultSession;
+    return { ...defaultSession, ...JSON.parse(raw), toasts: [] };
+  } catch {
+    return defaultSession;
+  }
+}
+
+type Store = Session & {
+  provider: typeof demoDataProvider;
+  fields: any[];
+  selectedField: any;
+  linked: any;
+  kpis: any[];
+  notifications: any[];
+  setScope: (scope: Scope) => void;
+  setField: (id: string) => void;
+  setDate: (date: string) => void;
+  setChartKind: (kind: ChartKind) => void;
+  setMetricIndex: (value: string) => void;
+  setWeatherKey: (value: string) => void;
+  toggleSidebar: () => void;
+  toggleLayer: (key: keyof LayerState) => void;
+  enableAllData: () => void;
+  setVerification: (verifyId: string, status: VerifyStatus) => void;
+  assignCase: (caseId: string, who: string) => void;
+  addObservation: (obs: ObservationDraft) => void;
+  markNotif: (id: string) => void;
+  pushToast: (title: string, body: string) => void;
+  dismissToast: (id: string) => void;
+};
+
+const Ctx = createContext<Store | null>(null);
+
+export function GeoWiseProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session>(() =>
+    typeof window === "undefined" ? defaultSession : loadSession(),
+  );
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...session, toasts: [] }));
+  }, [session]);
+
+  const regionId = session.scope === "india" || session.scope === "chittoor" ? undefined : session.scope;
+
+  const fields = useMemo(() => {
+    const all = demoDataProvider.getFields(regionId);
+    if (session.scope === "chittoor") return all.filter((f: any) => f.signature);
+    return all;
+  }, [regionId, session.scope]);
+
+  const selectedField =
+    fields.find((f: any) => f.id === session.selectedFieldId) ??
+    demoDataProvider.getField(session.selectedFieldId) ??
+    fields[0];
+
+  const linked = selectedField ? demoDataProvider.getLinkedRecord(selectedField.id) : null;
+
+  const kpis = useMemo(() => {
+    const dash = demoDataProvider.getDashboard(session.scope === "chittoor" ? "chittoor" : "india");
+    if (session.scope === "chittoor") return dash.kpis;
+    const verification = demoDataProvider.getVerificationCases(regionId).map((v: any) => ({
+      ...v,
+      status: session.verification[v.id] ?? v.status,
+    }));
+    const verified = verification.filter((v: any) => v.status === "Verified").length;
+    const pending = verification.filter((v: any) => v.status === "Pending" || v.status === "More evidence").length;
+    return dash.kpis.map((k: any) => {
+      if (k.id === "verifiedSubmissions") return { ...k, value: verified };
+      if (k.id === "activeVerification") return { ...k, value: pending };
+      if (k.id === "totalSubmissions")
+        return { ...k, value: k.value + session.observations.length };
+      return k;
+    });
+  }, [regionId, session.observations.length, session.scope, session.verification]);
+
+  const notifications = useMemo(() => {
+    return demoDataProvider.getNotifications().map((n: any) => ({
+      ...n,
+      read: n.read || session.readNotifs.includes(n.id),
+    }));
+  }, [session.readNotifs]);
+
+  const update = (patch: Partial<Session> | ((s: Session) => Session)) =>
+    setSession((s) => (typeof patch === "function" ? patch(s) : { ...s, ...patch }));
+
+  const setField = useCallback((id: string) => update({ selectedFieldId: id }), []);
+
+  const toggleLayer = useCallback((key: keyof LayerState) => {
+    setSession((s) => {
+      if (key === "allData") {
+        const on = !s.layers.allData;
+        return {
+          ...s,
+          layers: {
+            ...s.layers,
+            allData: on,
+            watershed: on || s.layers.watershed,
+            parcels: on || s.layers.parcels,
+            lulc: on,
+            ndvi: on,
+            ndwi: on,
+            water: on,
+            ai: on,
+            verification: on,
+            jal: on,
+          },
+        };
+      }
+      const next = { ...s.layers, [key]: !s.layers[key], allData: false };
+      return { ...s, layers: next };
+    });
+  }, []);
+
+  const enableAllData = useCallback(() => {
+    setSession((s) => ({
+      ...s,
+      layers: {
+        allData: true,
+        satellite: s.layers.satellite,
+        watershed: true,
+        parcels: true,
+        lulc: true,
+        ndvi: true,
+        ndwi: true,
+        water: true,
+        ai: true,
+        verification: true,
+        jal: true,
+      },
+    }));
+  }, []);
+
+  const setVerification = useCallback((verifyId: string, status: VerifyStatus) => {
+    setSession((s) => {
+      const extra = [...s.extraCredits];
+      if (status === "Verified") {
+        extra.push({
+          regionId: "IN-AP",
+          amount: 100,
+          reason: "Confirmed intervention",
+          at: new Date().toISOString(),
+        });
+      }
+      return {
+        ...s,
+        verification: { ...s.verification, [verifyId]: status },
+        extraCredits: extra,
+        toasts: [
+          ...s.toasts,
+          { id: `t-${Date.now()}`, title: "Verification updated", body: `Case set to ${status} (demo state).` },
+        ],
+      };
+    });
+  }, []);
+
+  const addObservation = useCallback((obs: ObservationDraft) => {
+    setSession((s) => ({
+      ...s,
+      observations: [obs, ...s.observations],
+      toasts: [
+        ...s.toasts,
+        {
+          id: `t-${Date.now()}`,
+          title: "Observation created",
+          body: "Demo flow: observation → AI analysis → triage → verification queue.",
+        },
+      ],
+    }));
+  }, []);
+
+  const value: Store = {
+    ...session,
+    provider: demoDataProvider,
+    fields,
+    selectedField,
+    linked,
+    kpis,
+    notifications,
+    setScope: (scope) => update({ scope }),
+    setField,
+    setDate: (selectedDate) => update({ selectedDate }),
+    setChartKind: (chartKind) => update({ chartKind }),
+    setMetricIndex: (metricIndex) => update({ metricIndex }),
+    setWeatherKey: (weatherKey) => update({ weatherKey }),
+    toggleSidebar: () => update((s) => ({ ...s, sidebarCollapsed: !s.sidebarCollapsed })),
+    toggleLayer,
+    enableAllData,
+    setVerification,
+    assignCase: (caseId, who) =>
+      update((s) => ({
+        ...s,
+        assignments: { ...s.assignments, [caseId]: who },
+        toasts: [...s.toasts, { id: `t-${Date.now()}`, title: "Case assigned", body: who }],
+      })),
+    addObservation,
+    markNotif: (id) => update((s) => ({ ...s, readNotifs: [...new Set([...s.readNotifs, id])] })),
+    pushToast: (title, body) =>
+      update((s) => ({ ...s, toasts: [...s.toasts, { id: `t-${Date.now()}`, title, body }] })),
+    dismissToast: (id) => update((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) })),
+  };
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useGeoWise() {
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("useGeoWise outside provider");
+  return ctx;
+}
