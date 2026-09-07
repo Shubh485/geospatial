@@ -1,5 +1,11 @@
 const GEMINI_MODEL = "gemini-2.0-flash";
 
+function geminiUrl(key: string) {
+  const path = `/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+  if (import.meta.env.DEV) return `/api/gemini${path}`;
+  return `https://generativelanguage.googleapis.com/v1beta${path}`;
+}
+
 export type VisionResult = {
   provider: "DemoVisionProvider" | "GeminiVisionProvider";
   scene: string;
@@ -100,9 +106,7 @@ Boxes are percentages of the image (x,y = top-left, w,h = size, 0-100).
 Detect visible water, fields, vegetation, built-up, bare soil, clouds, tanks/check dams if visible.
 Do not claim NDVI, NDWI, SAR, or official government classification. This is RGB photo interpretation only.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-    {
+  const res = await fetch(geminiUrl(key), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -187,9 +191,7 @@ Notes: ${opts.notes || "none"}
 Return JSON only with keys: scene, waterPresence (boolean), structureCondition, vegetationEdge, agreesWithUserLabel (boolean), confidence (0-100), qualitativeWaterIndex (0-1), rationale, elements (string array).
 Do not claim this is official government analysis.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-    {
+  const res = await fetch(geminiUrl(key), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

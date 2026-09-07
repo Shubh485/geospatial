@@ -87,6 +87,11 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
         </div>
         <DemoTag>DEMO INTELLIGENCE</DemoTag>
       </div>
+      {gw.capturePickMode && (
+        <div className="pointer-events-none absolute top-12 right-3 z-20 rounded-lg bg-amber px-3 py-1 text-[11px] font-semibold text-black">
+          Click the map to set capture location
+        </div>
+      )}
       <div className="pointer-events-auto absolute top-14 left-3 z-20 flex max-w-[70%] flex-wrap gap-1">
         {LAYER_PILLS.map((p) => {
           const active = p.key === "satellite" ? gw.layers.satellite : Boolean(gw.layers[p.key]);
@@ -109,7 +114,13 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
         <IconBtn label="Zoom out" onClick={() => map?.zoomOut()}>−</IconBtn>
         <IconBtn
           label="Locate"
-          onClick={() => map?.locate({ setView: true, maxZoom: 12 })}
+          onClick={() => {
+            if (!map) return;
+            map.once("locationerror", () =>
+              gw.pushToast("Locate failed", "Allow location permission, or use HTTPS. Falling back to selected field."),
+            );
+            map.locate({ setView: true, maxZoom: 12 });
+          }}
         >
           <LocateFixed size={14} />
         </IconBtn>
@@ -137,6 +148,60 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
         </IconBtn>
         <IconBtn label="Reset view" onClick={() => map?.setView([center.lat, center.lng], center.zoom)}>
           <RotateCcw size={14} />
+        </IconBtn>
+        <IconBtn
+          label="Copy share link"
+          onClick={() => {
+            const url = `${window.location.origin}/map?field=${gw.selectedField?.id ?? ""}`;
+            void navigator.clipboard.writeText(url);
+            gw.pushToast("Share link copied", url);
+          }}
+        >
+          ↗
+        </IconBtn>
+        <IconBtn
+          label="Export selected field GeoJSON"
+          onClick={() => {
+            const f = gw.selectedField;
+            if (!f) return;
+            const blob = new Blob(
+              [JSON.stringify({ type: "Feature", properties: { id: f.id, name: f.name, demo: true }, geometry: { type: "Polygon", coordinates: [f.polygon] } }, null, 2)],
+              { type: "application/geo+json" },
+            );
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `${f.id}.geojson`;
+            a.click();
+          }}
+        >
+          ↓
+        </IconBtn>
+        <IconBtn
+          label="Detect current map view (RGB snapshot)"
+          onClick={() => {
+            if (!map) return;
+            const b = map.getBounds();
+            const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+            const url = `https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=1024,768&format=jpg&f=image`;
+            fetch(url)
+              .then((r) => r.blob())
+              .then(
+                (blob) =>
+                  new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(String(reader.result));
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  }),
+              )
+              .then((dataUrl) => {
+                gw.setPendingSatelliteImage(dataUrl);
+                navigate("/satellite");
+              })
+              .catch(() => gw.pushToast("Snapshot failed", "Could not export the current view. Upload an image instead."));
+          }}
+        >
+          ⌕
         </IconBtn>
       </div>
       {layerDock && (
@@ -329,11 +394,9 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
           ))}
 
         {measuring && (
-          <MapClickMeasure
-            measure={measure}
-            setMeasure={setMeasure}
-          />
+          <MapClickMeasure measure={measure} setMeasure={setMeasure} />
         )}
+        {gw.capturePickMode && <MapClickPick onPick={(lat, lng) => gw.setCapturePin({ lat, lng })} />}
       </MapContainer>
 
       {measuring && (
@@ -426,5 +489,19 @@ function MapClickMeasure({
       map.off("click", handler);
     };
   }, [map, measure, setMeasure]);
+  return null;
+}
+
+function MapClickPick({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const handler = (e: L.LeafletMouseEvent) => onPick(e.latlng.lat, e.latlng.lng);
+    map.on("click", handler);
+    map.getContainer().style.cursor = "crosshair";
+    return () => {
+      map.off("click", handler);
+      map.getContainer().style.cursor = "";
+    };
+  }, [map, onPick]);
   return null;
 }

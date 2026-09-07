@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, DemoTag, EmptyState, Panel, StatusBadge } from "../components/ui.tsx";
 import { useGeoWise } from "../store/GeoWiseProvider.tsx";
@@ -25,6 +25,13 @@ export function SatelliteDetectPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SatelliteDetectResult | null>(null);
+
+  useEffect(() => {
+    if (!gw.pendingSatelliteImage) return;
+    setDataUrl(gw.pendingSatelliteImage);
+    setFileName("map-view-export.jpg");
+    gw.setPendingSatelliteImage(null);
+  }, [gw.pendingSatelliteImage, gw.setPendingSatelliteImage]);
 
   const regionHint =
     gw.scope === "chittoor"

@@ -6,8 +6,7 @@ import { useNavigate } from "react-router-dom";
 export function TriagePage() {
   const gw = useGeoWise();
   const navigate = useNavigate();
-  const cases = gw.provider.getTriageCases(gw.scope === "india" || gw.scope === "chittoor" ? undefined : gw.scope);
-  const filtered = gw.scope === "chittoor" ? cases.filter((c: any) => c.regionId === "IN-AP") : cases;
+  const cases = gw.triageQueue;
   return (
     <div className="space-y-4">
       <div>
@@ -27,7 +26,7 @@ export function TriagePage() {
       <div className="grid gap-4 xl:grid-cols-[1fr_1.1fr]">
         <Panel title="Queue">
           <div className="max-h-[520px] space-y-2 overflow-auto">
-            {filtered.map((c: any) => (
+            {cases.map((c: any) => (
               <div
                 key={c.id}
                 className={`w-full rounded-lg border px-3 py-2 text-left ${

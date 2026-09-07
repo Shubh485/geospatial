@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WATER_BODY_TYPES } from "../data/demo/constants.js";
 import { Button, DemoTag, Panel } from "../components/ui.tsx";
 import { useGeoWise } from "../store/GeoWiseProvider.tsx";
@@ -18,6 +18,14 @@ export function CapturePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const gemini = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+
+  useEffect(() => {
+    if (gw.capturePin) {
+      setLat(gw.capturePin.lat);
+      setLng(gw.capturePin.lng);
+      setLocSource("Map click");
+    }
+  }, [gw.capturePin]);
 
   function captureLocation() {
     if (!navigator.geolocation) {
@@ -40,6 +48,17 @@ export function CapturePage() {
 
   async function onFile(file: File) {
     setFileName(file.name);
+    try {
+      const exifr = await import("exifr");
+      const gps = await exifr.gps(file);
+      if (gps?.latitude && gps?.longitude) {
+        setLat(gps.latitude);
+        setLng(gps.longitude);
+        setLocSource("Photo EXIF GPS");
+      }
+    } catch {
+      /* no EXIF */
+    }
     const reader = new FileReader();
     reader.onload = () => setDataUrl(String(reader.result));
     reader.readAsDataURL(file);
@@ -117,6 +136,16 @@ export function CapturePage() {
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="ghost" onClick={captureLocation}>
               Capture my location
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                gw.setCapturePickMode(true);
+                navigate("/map");
+                gw.pushToast("Pick on map", "Click the basemap, then return here. Location will fill in.");
+              }}
+            >
+              Pick on map
             </Button>
             <Button onClick={() => void analyze()} disabled={busy}>
               {busy ? "Analyzing…" : "Analyze image"}

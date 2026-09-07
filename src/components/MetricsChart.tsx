@@ -143,6 +143,8 @@ export function VizControls() {
       <label className="block text-[11px] text-muted">Start</label>
       <input
         type="date"
+        min="2025-07-16"
+        max="2025-07-24"
         className="mt-1 mb-2 w-full rounded-lg border border-line bg-shell px-2 py-2 text-sm"
         value={gw.chartStart}
         onChange={(e) => gw.setChartRange(e.target.value, gw.chartEnd)}
@@ -150,6 +152,8 @@ export function VizControls() {
       <label className="block text-[11px] text-muted">End</label>
       <input
         type="date"
+        min="2025-07-16"
+        max="2025-07-24"
         className="mt-1 mb-3 w-full rounded-lg border border-line bg-shell px-2 py-2 text-sm"
         value={gw.chartEnd}
         onChange={(e) => gw.setChartRange(gw.chartStart, e.target.value)}

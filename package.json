@@ -11,6 +11,7 @@
     "preview": "vite preview --host --port 43173"
   },
   "dependencies": {
+    "exifr": "^7.1.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.544.0",
     "react": "^19.2.8",

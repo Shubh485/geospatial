@@ -41,6 +41,11 @@ type Session = {
   observations: ObservationDraft[];
   readNotifs: string[];
   extraCredits: { regionId: string; amount: number; reason: string; at: string }[];
+  extraTriage: any[];
+  extraVerification: any[];
+  capturePickMode: boolean;
+  capturePin: { lat: number; lng: number } | null;
+  pendingSatelliteImage: string | null;
   toasts: Toast[];
 };
 
@@ -77,6 +82,11 @@ const defaultSession: Session = {
   observations: [],
   readNotifs: [],
   extraCredits: [],
+  extraTriage: [],
+  extraVerification: [],
+  capturePickMode: false,
+  capturePin: null,
+  pendingSatelliteImage: null,
   toasts: [],
 };
 
@@ -88,6 +98,8 @@ function loadSession(): Session {
     return {
       ...defaultSession,
       ...parsed,
+      extraTriage: parsed.extraTriage ?? [],
+      extraVerification: parsed.extraVerification ?? [],
       layers: { ...defaultLayers, ...parsed.layers },
       toasts: [],
     };
@@ -103,6 +115,7 @@ type Store = Session & {
   linked: any;
   kpis: any[];
   notifications: any[];
+  triageQueue: any[];
   verificationOutcomes: { verified: number; pending: number; rejected: number; moreEvidence: number };
   setScope: (scope: Scope) => void;
   setField: (id: string) => void;
@@ -119,6 +132,9 @@ type Store = Session & {
   setVerification: (verifyId: string, status: VerifyStatus) => void;
   assignCase: (caseId: string, who: string) => void;
   addObservation: (obs: ObservationDraft) => void;
+  setCapturePickMode: (on: boolean) => void;
+  setCapturePin: (pin: { lat: number; lng: number } | null) => void;
+  setPendingSatelliteImage: (dataUrl: string | null) => void;
   markNotif: (id: string) => void;
   pushToast: (title: string, body: string) => void;
   dismissToast: (id: string) => void;
@@ -165,15 +181,29 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
     demoDataProvider.getField(session.selectedFieldId) ??
     fields[0];
 
-  const linked = selectedField ? demoDataProvider.getLinkedRecord(selectedField.id) : null;
+  const linked = useMemo(() => {
+    if (!selectedField) return null;
+    const base = demoDataProvider.getLinkedRecord(selectedField.id);
+    const extraV = session.extraVerification.find((v: any) => v.fieldId === selectedField.id);
+    const extraC = session.extraTriage.find((c: any) => c.fieldId === selectedField.id);
+    if (!extraV && !extraC) return base;
+    return {
+      ...(base ?? { field: selectedField }),
+      case: extraC ?? base?.case,
+      verification: extraV ?? base?.verification,
+    };
+  }, [selectedField, session.extraTriage, session.extraVerification]);
 
   const liveCases = useMemo(() => {
-    const list = demoDataProvider.getVerificationCases(regionId);
+    const list = [
+      ...demoDataProvider.getVerificationCases(regionId),
+      ...session.extraVerification.filter((v: any) => !regionId || v.regionId === regionId),
+    ];
     return list.map((v: any) => ({
       ...v,
       status: session.verification[v.id] ?? v.status,
     }));
-  }, [regionId, session.verification]);
+  }, [regionId, session.extraVerification, session.verification]);
 
   const verificationOutcomes = useMemo(() => {
     const scopeList =
@@ -219,6 +249,14 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
       return k;
     });
   }, [liveCases, session.observations.length, session.scope, session.verification]);
+
+  const triageQueue = useMemo(() => {
+    const base = demoDataProvider.getTriageCases(regionId);
+    const extra = session.extraTriage.filter((c: any) => !regionId || c.regionId === regionId);
+    const merged = [...extra, ...base];
+    if (session.scope === "chittoor") return merged.filter((c: any) => c.regionId === "IN-AP");
+    return merged;
+  }, [regionId, session.extraTriage, session.scope]);
 
   const notifications = useMemo(() => {
     return demoDataProvider.getNotifications().map((n: any) => ({
@@ -268,7 +306,9 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
     setSession((s) => {
       const prev = s.verification[verifyId];
       const extra = [...s.extraCredits];
-      const rec = demoDataProvider.getVerificationCases().find((v: any) => v.id === verifyId);
+      const rec =
+        demoDataProvider.getVerificationCases().find((v: any) => v.id === verifyId) ??
+        s.extraVerification.find((v: any) => v.id === verifyId);
       if (status === "Verified" && prev !== "Verified") {
         extra.push({
           regionId: rec?.regionId ?? "IN-AP",
@@ -290,19 +330,57 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addObservation = useCallback((obs: ObservationDraft) => {
-    setSession((s) => ({
-      ...s,
-      observations: [obs, ...s.observations],
-      layers: { ...s.layers, jal: true },
-      toasts: [
-        ...s.toasts,
-        {
-          id: `t-${Date.now()}`,
-          title: "Observation created",
-          body: "Demo flow: observation → AI analysis → triage queue. Pin on map (Jal layer).",
-        },
-      ],
-    }));
+    setSession((s) => {
+      const n = Date.now();
+      const caseId = `CASE-S-${n}`;
+      const verifyId = `VERIFY-S-${n}`;
+      return {
+        ...s,
+        observations: [obs, ...s.observations],
+        extraTriage: [
+          {
+            id: caseId,
+            fieldId: obs.fieldId,
+            regionId: obs.regionId,
+            priority: "Medium",
+            title: (obs.userNotes || obs.waterBodyType).slice(0, 80),
+            locationName: obs.waterBodyType,
+            confidence: obs.vision?.confidence ?? 74,
+            risk: "Medium",
+            status: "Open",
+            assignedTo: "Unassigned",
+            provenance: "DEMO INTELLIGENCE",
+          },
+          ...s.extraTriage,
+        ],
+        extraVerification: [
+          {
+            id: verifyId,
+            fieldId: obs.fieldId,
+            regionId: obs.regionId,
+            originalFinding: obs.userNotes || obs.waterBodyType,
+            evidence: {
+              satelliteLayer: obs.imageName ? `Session photo ${obs.imageName}` : "Community note",
+              aiAnalysis: obs.vision?.scene ?? "Demo intake",
+              location: `${obs.lat}, ${obs.lng}`,
+            },
+            verifierNotes: "Awaiting field visit.",
+            status: "Pending",
+            provenance: "DEMO INTELLIGENCE",
+          },
+          ...s.extraVerification,
+        ],
+        layers: { ...s.layers, jal: true },
+        toasts: [
+          ...s.toasts,
+          {
+            id: `t-${n}`,
+            title: "Observation created",
+            body: "Added to map (Jal layer), triage queue, and verification.",
+          },
+        ],
+      };
+    });
   }, []);
 
   const value: Store = {
@@ -313,6 +391,7 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
     linked,
     kpis,
     notifications,
+    triageQueue,
     verificationOutcomes,
     setScope: (scope) => update({ scope }),
     setField,
@@ -334,6 +413,9 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
         toasts: [...s.toasts, { id: `t-${Date.now()}`, title: "Case assigned", body: who }],
       })),
     addObservation,
+    setCapturePickMode: (capturePickMode) => update({ capturePickMode }),
+    setCapturePin: (capturePin) => update({ capturePin, capturePickMode: false }),
+    setPendingSatelliteImage: (pendingSatelliteImage) => update({ pendingSatelliteImage }),
     markNotif: (id) => update((s) => ({ ...s, readNotifs: [...new Set([...s.readNotifs, id])] })),
     pushToast: (title, body) =>
       update((s) => ({ ...s, toasts: [...s.toasts, { id: `t-${Date.now()}`, title, body }] })),

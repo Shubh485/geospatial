@@ -100,9 +100,24 @@ export function ReportsPage() {
             Generate demo report
           </button>
           {ready && (
-            <button className="rounded-lg border border-line px-3 py-2 text-xs" onClick={() => window.print()}>
-              Print / save PDF
-            </button>
+            <>
+              <button className="rounded-lg border border-line px-3 py-2 text-xs" onClick={() => window.print()}>
+                Print / save PDF
+              </button>
+              <button
+                className="rounded-lg border border-line px-3 py-2 text-xs"
+                onClick={() => {
+                  const html = `<html><body><h1>GeoWise demo report</h1><p>${report.exec}</p><p>LULC ${report.lulc}</p><p>NDVI ${report.veg} NDWI ${report.water}</p><p>${report.ai}</p><p>${report.xai}</p><p>${report.verify} ${report.rec}</p><p>DEMO ENVIRONMENT — not official.</p></body></html>`;
+                  const blob = new Blob([html], { type: "text/html" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = "geowise-demo-report.html";
+                  a.click();
+                }}
+              >
+                Download HTML
+              </button>
+            </>
           )}
         </div>
       </div>
