@@ -52,6 +52,9 @@ export function GeoAIPage() {
             <Button variant="ghost" onClick={() => navigate("/triage")}>
               Send to triage
             </Button>
+            <Button variant="ghost" onClick={() => navigate("/satellite")}>
+              Detect satellite image
+            </Button>
           </div>
         </Panel>
       </div>

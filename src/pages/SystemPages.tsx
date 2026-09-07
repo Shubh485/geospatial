@@ -133,7 +133,9 @@ export function SettingsPage() {
       <h1 className="text-xl font-semibold">Settings</h1>
       <Panel title="Environment">
         <p className="text-sm">Mode: DEMO ENVIRONMENT</p>
-        <p className="text-sm">Vision: {import.meta.env.VITE_GEMINI_API_KEY ? "Gemini (optional)" : "DemoVisionProvider"}</p>
+        <p className="text-sm">
+          Vision: {import.meta.env.VITE_GEMINI_API_KEY ? "Gemini (optional) — field photos + satellite RGB detect" : "DemoVisionProvider"}
+        </p>
         <p className="text-sm">Basemap: {gw.layers.satellite ? "Esri World Imagery" : "OpenStreetMap"}</p>
         <p className="mt-3 text-xs text-muted">
           Session is stored in localStorage. Clearing site data resets verification and captures.

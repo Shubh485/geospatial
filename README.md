@@ -17,7 +17,9 @@ App: [http://localhost:43173](http://localhost:43173)
 
 Environment: **DEMO**
 
-Optional vision: copy `.env.example` to `.env.local` and set `VITE_GEMINI_API_KEY`. Without it, Field capture uses DemoVisionProvider.
+Optional vision: copy `.env.example` to `.env.local` and set `VITE_GEMINI_API_KEY`. Without it, Field capture and **Satellite detect** use DemoVisionProvider.
+
+**Satellite detect** (`/satellite`): upload your own RGB aerial/satellite JPEG/PNG. Gemini (if keyed) returns labeled boxes; otherwise a demo detector. This is not live NDVI and does not classify the Leaflet tile layer.
 
 ## Judge path
 

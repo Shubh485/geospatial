@@ -18,6 +18,7 @@ import {
   Wallet,
   FileText,
   Camera,
+  Satellite,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -32,6 +33,7 @@ const nav = [
     items: [
       { to: "/map", label: "Live Map", icon: MapIcon },
       { to: "/geo-ai", label: "Geo AI", icon: Cpu },
+      { to: "/satellite", label: "Satellite detect", icon: Satellite },
       { to: "/capture", label: "Field capture", icon: Camera },
     ],
   },

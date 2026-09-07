@@ -7,6 +7,7 @@ import { RecommendationsPage, TriagePage, VerificationPage } from "./pages/OpsPa
 import { CreditsPage, JalSaheliPage, LearningPage } from "./pages/CommunityPages.tsx";
 import { AnalyticsPage, ReportsPage, SettingsPage } from "./pages/SystemPages.tsx";
 import { CapturePage } from "./pages/CapturePage.tsx";
+import { SatelliteDetectPage } from "./pages/SatelliteDetectPage.tsx";
 import { GeoWiseProvider } from "./store/GeoWiseProvider.tsx";
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/map" element={<LiveMapPage />} />
             <Route path="/geo-ai" element={<GeoAIPage />} />
             <Route path="/capture" element={<CapturePage />} />
+            <Route path="/satellite" element={<SatelliteDetectPage />} />
             <Route path="/xai" element={<XaiPage />} />
             <Route path="/triage" element={<TriagePage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
