@@ -10,7 +10,8 @@ export type LayerKey =
   | "water"
   | "ai"
   | "verification"
-  | "jal";
+  | "jal"
+  | "soil";
 
 export type ChartKind = "line" | "area";
 

@@ -3,7 +3,7 @@ import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, useMap } from "r
 import L from "leaflet";
 import { Layers, LocateFixed, Maximize, Minimize, Ruler, RotateCcw } from "lucide-react";
 import { useGeoWise } from "../store/GeoWiseProvider.tsx";
-import { ndviColor, ndwiColor, ringToLatLngs } from "../lib/utils.ts";
+import { ndviColor, ndwiColor, ringToLatLngs, soilColor } from "../lib/utils.ts";
 import { haversineKm } from "../lib/geo.ts";
 import { Button, DemoTag, StatusBadge } from "./ui.tsx";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ const LAYER_PILLS: { key: LayerKey | "allData" | "satellite"; label: string }[] 
   { key: "lulc", label: "LULC" },
   { key: "ndvi", label: "NDVI" },
   { key: "ndwi", label: "NDWI" },
+  { key: "soil", label: "Soil" },
   { key: "water", label: "Water" },
   { key: "ai", label: "AI Flags" },
   { key: "verification", label: "Verification" },
@@ -50,6 +51,8 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
   const [full, setFull] = useState(false);
   const [measure, setMeasure] = useState<{ a?: { lat: number; lng: number }; b?: { lat: number; lng: number } }>({});
   const [measuring, setMeasuring] = useState(false);
+  const [layerDock, setLayerDock] = useState(false);
+  const dateShift = (Number(gw.selectedDate.slice(-2)) - 19) * 0.012;
 
   const watersheds = gw.provider.getWatersheds(
     gw.scope === "india" || gw.scope === "chittoor" ? undefined : gw.scope,
@@ -71,6 +74,8 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
     ? ["Agriculture", "Forest", "Waterbody", "Built-up", "Barren"]
     : gw.layers.ndvi
       ? ["NDVI low", "NDVI medium", "NDVI high"]
+    : gw.layers.soil
+      ? ["Soil moisture low", "Soil moisture medium", "Soil moisture high"]
       : ["Verified intervention", "Flagged zone", "Water body", "AI detection", "Jal Saheli", "Verification pending"];
 
   return (
@@ -108,7 +113,7 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
         >
           <LocateFixed size={14} />
         </IconBtn>
-        <IconBtn label="Layers" onClick={() => gw.toggleLayer("parcels")}>
+        <IconBtn label="Layers" onClick={() => setLayerDock((v) => !v)}>
           <Layers size={14} />
         </IconBtn>
         <IconBtn
@@ -134,6 +139,21 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
           <RotateCcw size={14} />
         </IconBtn>
       </div>
+      {layerDock && (
+        <div className="glass pointer-events-auto absolute top-28 left-14 z-20 w-44 rounded-lg p-2 text-[11px]">
+          <p className="mb-1 font-semibold text-muted">LAYERS</p>
+          {LAYER_PILLS.filter((p) => p.key !== "allData").map((p) => (
+            <label key={p.key} className="flex items-center gap-2 py-0.5">
+              <input
+                type="checkbox"
+                checked={p.key === "satellite" ? gw.layers.satellite : Boolean(gw.layers[p.key])}
+                onChange={() => gw.toggleLayer(p.key)}
+              />
+              {p.label}
+            </label>
+          ))}
+        </div>
+      )}
 
       <MapContainer
         center={[center.lat, center.lng]}
@@ -166,22 +186,38 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
             </Polygon>
           ))}
 
-        {(gw.layers.parcels || gw.layers.lulc || gw.layers.ndvi || gw.layers.ndwi || gw.layers.water) &&
+        {(gw.layers.parcels || gw.layers.lulc || gw.layers.ndvi || gw.layers.ndwi || gw.layers.water || gw.layers.soil) &&
           fields.map((f: any) => {
             const showWater = gw.layers.water && f.landUse === "Waterbody";
-            if (gw.layers.water && !gw.layers.parcels && !gw.layers.lulc && !gw.layers.ndvi && !gw.layers.ndwi && !showWater)
+            if (
+              gw.layers.water &&
+              !gw.layers.parcels &&
+              !gw.layers.lulc &&
+              !gw.layers.ndvi &&
+              !gw.layers.ndwi &&
+              !gw.layers.soil &&
+              !showWater
+            )
               return null;
-            if (gw.layers.water && !showWater && !(gw.layers.parcels || gw.layers.lulc || gw.layers.ndvi || gw.layers.ndwi))
+            if (
+              gw.layers.water &&
+              !showWater &&
+              !(gw.layers.parcels || gw.layers.lulc || gw.layers.ndvi || gw.layers.ndwi || gw.layers.soil)
+            )
               return null;
             let color = "#10b981";
             let fillOpacity = 0.18;
             if (gw.layers.lulc) color = f.color;
             if (gw.layers.ndvi) {
-              color = ndviColor(f.ndvi);
+              color = ndviColor(f.ndvi + dateShift);
               fillOpacity = 0.45;
             }
             if (gw.layers.ndwi) {
-              color = ndwiColor(f.ndwi);
+              color = ndwiColor(f.ndwi + dateShift * 0.5);
+              fillOpacity = 0.4;
+            }
+            if (gw.layers.soil) {
+              color = soilColor(f.soilMoisture + dateShift * 40);
               fillOpacity = 0.4;
             }
             if (gw.selectedField?.id === f.id) {
@@ -194,7 +230,9 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
                 positions={ringToLatLngs(f.polygon)}
                 pathOptions={{ color, weight: gw.selectedField?.id === f.id ? 2.5 : 1, fillOpacity }}
                 eventHandlers={{
-                  click: () => gw.setField(f.id),
+                  click: () => {
+                    if (!measuring) gw.setField(f.id);
+                  },
                 }}
               >
                 <Popup>
@@ -247,6 +285,29 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
           })}
 
         {gw.layers.jal &&
+          gw.observations.map((o) => (
+            <CircleMarker
+              key={o.id}
+              center={[o.lat, o.lng]}
+              radius={7}
+              pathOptions={{ color: "#f472b6", fillOpacity: 1 }}
+              eventHandlers={{
+                click: () => {
+                  if (o.fieldId) gw.setField(o.fieldId);
+                },
+              }}
+            >
+              <Popup>
+                Session capture
+                <br />
+                {o.waterBodyType}
+                <br />
+                {o.userNotes}
+              </Popup>
+            </CircleMarker>
+          ))}
+
+        {gw.layers.jal &&
           jal.map((j: any) => (
             <CircleMarker
               key={j.id}
@@ -296,7 +357,7 @@ export function GeoMap({ height = "520px", flyToSelected = true }: { height?: st
       </div>
 
       {gw.selectedField && (
-        <aside className="glass absolute top-24 right-3 z-20 hidden w-72 rounded-xl p-3 md:block">
+        <aside className="glass absolute right-3 bottom-16 z-20 w-[min(18rem,calc(100%-1.5rem))] rounded-xl p-3 md:top-24 md:bottom-auto">
           <div className="flex items-center justify-between">
             <p className="text-[10px] tracking-[0.14em] text-muted uppercase">Field insights</p>
             <StatusBadge value={gw.selectedField.status} />

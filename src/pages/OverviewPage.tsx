@@ -54,10 +54,12 @@ export function OverviewPage() {
           </Panel>
           <Panel title="Weather summary" eyebrow="Last 7 days" action={<DemoTag>DEMO WEATHER</DemoTag>}>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <p>Temp {weather.temperatureC}°C</p>
-              <p>Rain {weather.rainfallMm} mm</p>
+              <p className={gw.weatherKey === "Temperature" ? "text-emerald" : ""}>Temp {weather.temperatureC}°C</p>
+              <p className={gw.weatherKey === "Rainfall" ? "text-emerald" : ""}>Rain {weather.rainfallMm} mm</p>
               <p>Humidity {weather.humidityPct}%</p>
-              <p>Wind {weather.windKmh} km/h</p>
+              <p className={gw.weatherKey === "Moisture" ? "text-emerald" : ""}>
+                Moisture (demo) {gw.selectedField?.soilMoisture ?? "—"}%
+              </p>
             </div>
           </Panel>
           <Panel title={fusion.title} eyebrow="Data fusion">

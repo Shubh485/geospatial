@@ -16,6 +16,12 @@ export function ndviColor(v: number) {
   return "#16a34a";
 }
 
+export function soilColor(v: number) {
+  if (v < 15) return "#78350f";
+  if (v < 22) return "#38bdf8";
+  return "#0369a1";
+}
+
 export function ndwiColor(v: number) {
   if (v < 0.15) return "#1e3a5f";
   if (v < 0.3) return "#0369a1";

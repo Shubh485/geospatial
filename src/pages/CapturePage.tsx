@@ -133,15 +133,21 @@ export function CapturePage() {
           ) : (
             <div className="space-y-2 text-sm">
               <p>Type: {last.waterBodyType}</p>
-              <p>Provider: {last.vision.provider}</p>
-              <p>Scene: {last.vision.scene}</p>
-              <p>Water present: {last.vision.waterPresence ? "Yes" : "No"}</p>
-              <p>Structure: {last.vision.structureCondition}</p>
-              <p>Vegetation edge: {last.vision.vegetationEdge}</p>
-              <p>Agrees with your label: {last.vision.agreesWithUserLabel ? "Yes" : "Mismatch"}</p>
-              <p>Confidence: {last.vision.confidence}%</p>
-              <p>Image-based water index: {last.vision.qualitativeWaterIndex} (not satellite NDWI)</p>
-              <p className="text-muted">{last.vision.rationale}</p>
+              {last.vision ? (
+                <>
+                  <p>Provider: {last.vision.provider}</p>
+                  <p>Scene: {last.vision.scene}</p>
+                  <p>Water present: {last.vision.waterPresence ? "Yes" : "No"}</p>
+                  <p>Structure: {last.vision.structureCondition}</p>
+                  <p>Vegetation edge: {last.vision.vegetationEdge}</p>
+                  <p>Agrees with your label: {last.vision.agreesWithUserLabel ? "Yes" : "Mismatch"}</p>
+                  <p>Confidence: {last.vision.confidence}%</p>
+                  <p>Image-based water index: {last.vision.qualitativeWaterIndex} (not satellite NDWI)</p>
+                  <p className="text-muted">{last.vision.rationale}</p>
+                </>
+              ) : (
+                <p>{last.userNotes}</p>
+              )}
             </div>
           )}
         </Panel>

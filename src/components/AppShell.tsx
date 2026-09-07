@@ -181,10 +181,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={`${r.type}-${r.id}`}
                       className="block w-full border-t border-line px-3 py-2 text-left text-xs hover:bg-white/5"
                       onClick={() => {
-                        if (r.type === "field" || r.type === "case" || r.type === "verification") gw.setField(r.fieldId ?? r.id);
+                        if (r.fieldId) gw.setField(r.fieldId);
+                        else if (r.type === "field") gw.setField(r.id);
                         if (r.type === "field") navigate("/map");
                         if (r.type === "case") navigate("/triage");
-                        if (r.type === "jal") navigate("/jal-saheli");
+                        if (r.type === "verification") navigate("/verification");
+                        if (r.type === "submission") navigate("/geo-ai");
+                        if (r.type === "jal") navigate("/map");
                         if (r.type === "recommendation") navigate("/recommendations");
                         if (r.type === "location") gw.setScope(r.regionId ?? "india");
                         setSearchOpen(false);
@@ -199,7 +202,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
           <select
-            className="hidden rounded-lg border border-line bg-panel px-2 py-1.5 text-xs md:block"
+            className="max-w-[42vw] rounded-lg border border-line bg-panel px-2 py-1.5 text-xs md:max-w-none"
             value={gw.scope}
             onChange={(e) => gw.setScope(e.target.value)}
             aria-label="Region"
@@ -228,7 +231,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <button
                     key={n.id}
                     className="mb-1 w-full rounded-lg px-2 py-2 text-left hover:bg-white/5"
-                    onClick={() => gw.markNotif(n.id)}
+                    onClick={() => {
+                      gw.markNotif(n.id);
+                      if (n.type === "ai") {
+                        gw.setField("FIELD-001");
+                        navigate("/geo-ai");
+                      } else if (n.type === "verification") navigate("/verification");
+                      else if (n.type === "case") navigate("/triage");
+                      else if (n.type === "jal") navigate("/jal-saheli");
+                      else if (n.type === "credit") navigate("/credits");
+                      else if (n.type === "recommendation") navigate("/recommendations");
+                      setBellOpen(false);
+                    }}
                   >
                     <p className="text-xs font-medium">{n.title}</p>
                     <p className="text-[11px] text-muted">{n.body}</p>
@@ -237,7 +251,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald/20 text-xs font-bold text-emerald">A</div>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald/20 text-xs font-bold text-emerald"
+            title="Settings"
+            onClick={() => navigate("/settings")}
+          >
+            A
+          </button>
         </header>
         <main className="app-scroll min-w-0 flex-1 p-4 md:p-5">{children}</main>
       </div>

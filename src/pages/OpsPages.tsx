@@ -28,30 +28,31 @@ export function TriagePage() {
         <Panel title="Queue">
           <div className="max-h-[520px] space-y-2 overflow-auto">
             {filtered.map((c: any) => (
-              <button
+              <div
                 key={c.id}
-                onClick={() => gw.setField(c.fieldId)}
                 className={`w-full rounded-lg border px-3 py-2 text-left ${
                   gw.selectedField?.id === c.fieldId ? "border-emerald bg-emerald/10" : "border-line"
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold">{c.title}</p>
-                  <StatusBadge value={c.priority} />
-                </div>
-                <p className="text-[11px] text-muted">
-                  {c.locationName} · confidence {c.confidence}% · {gw.assignments[c.id] ?? c.assignedTo}
-                </p>
+                <button type="button" className="w-full text-left" onClick={() => gw.setField(c.fieldId)}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold">{c.title}</p>
+                    <StatusBadge value={c.priority} />
+                  </div>
+                  <p className="text-[11px] text-muted">
+                    {c.locationName} · confidence {c.confidence}% · {gw.assignments[c.id] ?? c.assignedTo}
+                  </p>
+                </button>
                 <div className="mt-2 flex gap-2">
-                  <Button variant="ghost" onClick={() => navigate("/geo-ai")}>
+                  <Button variant="ghost" onClick={() => { gw.setField(c.fieldId); navigate("/geo-ai"); }}>
                     Review
                   </Button>
                   <Button variant="ghost" onClick={() => gw.assignCase(c.id, "Field Officer — demo cell")}>
                     Assign
                   </Button>
-                  <Button onClick={() => navigate("/verification")}>Verify</Button>
+                  <Button onClick={() => { gw.setField(c.fieldId); navigate("/verification"); }}>Verify</Button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </Panel>

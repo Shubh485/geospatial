@@ -92,11 +92,21 @@ export function JalSaheliPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!msg.trim()) return;
+              gw.addObservation({
+                id: `JAL-LIVE-${Date.now()}`,
+                fieldId: gw.selectedField?.id ?? "FIELD-001",
+                regionId: gw.selectedField?.regionId ?? "IN-AP",
+                capturedAt: new Date().toISOString(),
+                lat: gw.selectedField?.lat ?? 13.2172,
+                lng: gw.selectedField?.lng ?? 79.1003,
+                locationSource: "Jal Saheli channel",
+                waterBodyType: "Community observation",
+                userNotes: msg,
+              });
               setChannel((c: { id: string; who: string; text: string; at: string }[]) => [
                 ...c,
                 { id: `local-${Date.now()}`, who: "You", text: msg, at: new Date().toISOString() },
               ]);
-              gw.pushToast("Observation created", "AI analysis → triage → verification queue (demo).");
               setMsg("");
             }}
           >
@@ -117,9 +127,11 @@ export function JalSaheliPage() {
 export function CreditsPage() {
   const gw = useGeoWise();
   const ledgers = gw.provider.getCredits(gw.scope === "india" || gw.scope === "chittoor" ? undefined : gw.scope);
-  const focus = gw.scope === "chittoor" ? ledgers.find((l: any) => l.regionId === "IN-AP") : ledgers[0];
-  const bonus = gw.extraCredits.reduce((s, x) => s + x.amount, 0);
+  const focus =
+    ledgers.find((l: any) => l.regionId === gw.selectedField?.regionId) ??
+    (gw.scope === "chittoor" ? ledgers.find((l: any) => l.regionId === "IN-AP") : ledgers[0]);
   if (!focus) return <EmptyState title="No ledger" body="No demo credits for this scope." />;
+  const bonus = gw.extraCredits.filter((t) => t.regionId === focus.regionId).reduce((s, x) => s + x.amount, 0);
   const score = focus.villageStewardshipScore + bonus;
   return (
     <div className="space-y-4">
@@ -155,8 +167,7 @@ export function LearningPage() {
   const gw = useGeoWise();
   const v = gw.linked?.verification;
   const status = v ? gw.verification[v.id] ?? v.status : "—";
-  const analytics = gw.provider.getAnalytics();
-  const outcomes = analytics.byRange["90D"].verificationOutcomes;
+  const outcomes = gw.verificationOutcomes;
   return (
     <div className="space-y-4">
       <div>

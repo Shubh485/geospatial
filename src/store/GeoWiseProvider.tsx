@@ -17,8 +17,8 @@ export type ObservationDraft = {
   locationSource: string;
   waterBodyType: string;
   userNotes: string;
-  vision: VisionResult;
-  imageName: string;
+  vision?: VisionResult;
+  imageName?: string;
 };
 
 type Toast = { id: string; title: string; body: string };
@@ -27,11 +27,15 @@ type Session = {
   scope: Scope;
   selectedFieldId: string;
   selectedDate: string;
+  chartStart: string;
+  chartEnd: string;
   chartKind: ChartKind;
+  chartFullscreen: boolean;
   metricIndex: string;
   weatherKey: string;
   sidebarCollapsed: boolean;
   layers: LayerState;
+  layerBackup: LayerState | null;
   verification: Record<string, VerifyStatus>;
   assignments: Record<string, string>;
   observations: ObservationDraft[];
@@ -49,6 +53,7 @@ const defaultLayers: LayerState = {
   ndvi: false,
   ndwi: false,
   water: false,
+  soil: false,
   ai: true,
   verification: false,
   jal: false,
@@ -58,11 +63,15 @@ const defaultSession: Session = {
   scope: "india",
   selectedFieldId: "FIELD-001",
   selectedDate: "2025-07-19",
+  chartStart: "2025-07-16",
+  chartEnd: "2025-07-24",
   chartKind: "line",
+  chartFullscreen: false,
   metricIndex: "NDVI",
   weatherKey: "Moisture",
   sidebarCollapsed: false,
   layers: defaultLayers,
+  layerBackup: null,
   verification: {},
   assignments: {},
   observations: [],
@@ -75,7 +84,13 @@ function loadSession(): Session {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultSession;
-    return { ...defaultSession, ...JSON.parse(raw), toasts: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      ...defaultSession,
+      ...parsed,
+      layers: { ...defaultLayers, ...parsed.layers },
+      toasts: [],
+    };
   } catch {
     return defaultSession;
   }
@@ -88,14 +103,18 @@ type Store = Session & {
   linked: any;
   kpis: any[];
   notifications: any[];
+  verificationOutcomes: { verified: number; pending: number; rejected: number; moreEvidence: number };
   setScope: (scope: Scope) => void;
   setField: (id: string) => void;
   setDate: (date: string) => void;
+  setChartRange: (start: string, end: string) => void;
   setChartKind: (kind: ChartKind) => void;
+  setChartFullscreen: (on: boolean) => void;
   setMetricIndex: (value: string) => void;
   setWeatherKey: (value: string) => void;
   toggleSidebar: () => void;
   toggleLayer: (key: keyof LayerState) => void;
+  setLayer: (key: LayerKey | "satellite" | "soil", on: boolean) => void;
   enableAllData: () => void;
   setVerification: (verifyId: string, status: VerifyStatus) => void;
   assignCase: (caseId: string, who: string) => void;
@@ -106,6 +125,23 @@ type Store = Session & {
 };
 
 const Ctx = createContext<Store | null>(null);
+
+function overlayLayersOn(): LayerState {
+  return {
+    allData: true,
+    satellite: true,
+    watershed: true,
+    parcels: true,
+    lulc: true,
+    ndvi: true,
+    ndwi: true,
+    water: true,
+    soil: true,
+    ai: true,
+    verification: true,
+    jal: true,
+  };
+}
 
 export function GeoWiseProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(() =>
@@ -131,23 +167,58 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
 
   const linked = selectedField ? demoDataProvider.getLinkedRecord(selectedField.id) : null;
 
-  const kpis = useMemo(() => {
-    const dash = demoDataProvider.getDashboard(session.scope === "chittoor" ? "chittoor" : "india");
-    if (session.scope === "chittoor") return dash.kpis;
-    const verification = demoDataProvider.getVerificationCases(regionId).map((v: any) => ({
+  const liveCases = useMemo(() => {
+    const list = demoDataProvider.getVerificationCases(regionId);
+    return list.map((v: any) => ({
       ...v,
       status: session.verification[v.id] ?? v.status,
     }));
-    const verified = verification.filter((v: any) => v.status === "Verified").length;
-    const pending = verification.filter((v: any) => v.status === "Pending" || v.status === "More evidence").length;
+  }, [regionId, session.verification]);
+
+  const verificationOutcomes = useMemo(() => {
+    const scopeList =
+      session.scope === "chittoor" ? liveCases.filter((v: any) => v.regionId === "IN-AP") : liveCases;
+    return {
+      verified: scopeList.filter((v: any) => v.status === "Verified").length,
+      pending: scopeList.filter((v: any) => v.status === "Pending").length,
+      rejected: scopeList.filter((v: any) => v.status === "Rejected").length,
+      moreEvidence: scopeList.filter((v: any) => v.status === "More evidence").length,
+    };
+  }, [liveCases, session.scope]);
+
+  const kpis = useMemo(() => {
+    const dash = demoDataProvider.getDashboard(session.scope === "chittoor" ? "chittoor" : "india");
+    if (session.scope === "chittoor") {
+      const sig = demoDataProvider.getFields().filter((f: any) => f.signature);
+      let dV = 0;
+      let dP = 0;
+      sig.forEach((f: any) => {
+        const rec = demoDataProvider.getLinkedRecord(f.id);
+        const seed = rec?.verification?.status;
+        const now = rec?.verification ? (session.verification[rec.verification.id] ?? seed) : seed;
+        if (now === "Verified" && seed !== "Verified") dV += 1;
+        if (seed === "Verified" && now !== "Verified") dV -= 1;
+        const seedPending = seed === "Pending" || seed === "More evidence";
+        const nowPending = now === "Pending" || now === "More evidence";
+        if (nowPending && !seedPending) dP += 1;
+        if (!nowPending && seedPending) dP -= 1;
+      });
+      return dash.kpis.map((k: any) => {
+        if (k.id === "verifiedSubmissions") return { ...k, value: k.value + dV };
+        if (k.id === "activeVerification") return { ...k, value: Math.max(0, k.value + dP) };
+        if (k.id === "totalSubmissions") return { ...k, value: k.value + session.observations.length };
+        return k;
+      });
+    }
+    const verified = liveCases.filter((v: any) => v.status === "Verified").length;
+    const pending = liveCases.filter((v: any) => v.status === "Pending" || v.status === "More evidence").length;
     return dash.kpis.map((k: any) => {
       if (k.id === "verifiedSubmissions") return { ...k, value: verified };
       if (k.id === "activeVerification") return { ...k, value: pending };
-      if (k.id === "totalSubmissions")
-        return { ...k, value: k.value + session.observations.length };
+      if (k.id === "totalSubmissions") return { ...k, value: k.value + session.observations.length };
       return k;
     });
-  }, [regionId, session.observations.length, session.scope, session.verification]);
+  }, [liveCases, session.observations.length, session.scope, session.verification]);
 
   const notifications = useMemo(() => {
     return demoDataProvider.getNotifications().map((n: any) => ({
@@ -164,54 +235,43 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
   const toggleLayer = useCallback((key: keyof LayerState) => {
     setSession((s) => {
       if (key === "allData") {
-        const on = !s.layers.allData;
+        if (s.layers.allData) {
+          return {
+            ...s,
+            layers: s.layerBackup ?? { ...defaultLayers, satellite: s.layers.satellite },
+            layerBackup: null,
+          };
+        }
         return {
           ...s,
-          layers: {
-            ...s.layers,
-            allData: on,
-            watershed: on || s.layers.watershed,
-            parcels: on || s.layers.parcels,
-            lulc: on,
-            ndvi: on,
-            ndwi: on,
-            water: on,
-            ai: on,
-            verification: on,
-            jal: on,
-          },
+          layerBackup: { ...s.layers },
+          layers: { ...overlayLayersOn(), satellite: s.layers.satellite },
         };
       }
-      const next = { ...s.layers, [key]: !s.layers[key], allData: false };
-      return { ...s, layers: next };
+      return { ...s, layers: { ...s.layers, [key]: !s.layers[key], allData: false } };
     });
+  }, []);
+
+  const setLayer = useCallback((key: LayerKey | "satellite" | "soil", on: boolean) => {
+    setSession((s) => ({ ...s, layers: { ...s.layers, [key]: on, allData: false } }));
   }, []);
 
   const enableAllData = useCallback(() => {
     setSession((s) => ({
       ...s,
-      layers: {
-        allData: true,
-        satellite: s.layers.satellite,
-        watershed: true,
-        parcels: true,
-        lulc: true,
-        ndvi: true,
-        ndwi: true,
-        water: true,
-        ai: true,
-        verification: true,
-        jal: true,
-      },
+      layerBackup: { ...s.layers },
+      layers: { ...overlayLayersOn(), satellite: s.layers.satellite },
     }));
   }, []);
 
   const setVerification = useCallback((verifyId: string, status: VerifyStatus) => {
     setSession((s) => {
+      const prev = s.verification[verifyId];
       const extra = [...s.extraCredits];
-      if (status === "Verified") {
+      const rec = demoDataProvider.getVerificationCases().find((v: any) => v.id === verifyId);
+      if (status === "Verified" && prev !== "Verified") {
         extra.push({
-          regionId: "IN-AP",
+          regionId: rec?.regionId ?? "IN-AP",
           amount: 100,
           reason: "Confirmed intervention",
           at: new Date().toISOString(),
@@ -233,12 +293,13 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
     setSession((s) => ({
       ...s,
       observations: [obs, ...s.observations],
+      layers: { ...s.layers, jal: true },
       toasts: [
         ...s.toasts,
         {
           id: `t-${Date.now()}`,
           title: "Observation created",
-          body: "Demo flow: observation → AI analysis → triage → verification queue.",
+          body: "Demo flow: observation → AI analysis → triage queue. Pin on map (Jal layer).",
         },
       ],
     }));
@@ -252,14 +313,18 @@ export function GeoWiseProvider({ children }: { children: ReactNode }) {
     linked,
     kpis,
     notifications,
+    verificationOutcomes,
     setScope: (scope) => update({ scope }),
     setField,
     setDate: (selectedDate) => update({ selectedDate }),
+    setChartRange: (chartStart, chartEnd) => update({ chartStart, chartEnd }),
     setChartKind: (chartKind) => update({ chartKind }),
+    setChartFullscreen: (chartFullscreen) => update({ chartFullscreen }),
     setMetricIndex: (metricIndex) => update({ metricIndex }),
     setWeatherKey: (weatherKey) => update({ weatherKey }),
     toggleSidebar: () => update((s) => ({ ...s, sidebarCollapsed: !s.sidebarCollapsed })),
     toggleLayer,
+    setLayer,
     enableAllData,
     setVerification,
     assignCase: (caseId, who) =>

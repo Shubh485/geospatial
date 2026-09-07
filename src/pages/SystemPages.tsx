@@ -89,15 +89,22 @@ export function ReportsPage() {
     <div className="space-y-4">
       <div className="flex justify-between">
         <h1 className="text-xl font-semibold">Reports</h1>
-        <button
-          className="rounded-lg bg-emerald px-3 py-2 text-xs font-semibold text-black"
-          onClick={() => {
-            setReady(true);
-            gw.pushToast("Demo report generated", "This is a prototype document, not an official briefing.");
-          }}
-        >
-          Generate demo report
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="rounded-lg bg-emerald px-3 py-2 text-xs font-semibold text-black"
+            onClick={() => {
+              setReady(true);
+              gw.pushToast("Demo report generated", "This is a prototype document, not an official briefing.");
+            }}
+          >
+            Generate demo report
+          </button>
+          {ready && (
+            <button className="rounded-lg border border-line px-3 py-2 text-xs" onClick={() => window.print()}>
+              Print / save PDF
+            </button>
+          )}
+        </div>
       </div>
       {!ready ? (
         <p className="text-sm text-muted">Generate a demo report for the selected field.</p>
